@@ -1,5 +1,4 @@
 import random
-import os
 import numpy as np
 import matplotlib.image as mpimg
 from sklearn.ensemble import RandomForestClassifier
@@ -7,19 +6,23 @@ from sklearn.ensemble import RandomForestClassifier
 nclasses = 19
 
 def binencode(ls):
+    ''' Binary encode
+    Args:
+        ls: a tuple
+    '''
     ret = np.zeros(nclasses * len(ls))
     for i in range(len(ls)):
         for j in range(len(ls[i])):
             ret[i * nclasses + ls[i][j]] = 1
 
-    return np.reshape(ret, (len(ls), nclasses)) 
+    return np.reshape(ret, (len(ls), nclasses))
 
 def getloc(recid):
     locmap = {1:0, 2:1, 4:2, 5:3, 7:4, 8:5, 10:6, 11:7,
               13:8, 15:9, 16:10, 17:11, 18:12}
     key =  int(recmap[recid].split('_')[0].split('PC')[1])
     return locmap[key]
-    
+
 def getclustloc(recid):
     clustmap = {1:0, 2:0, 4:0, 5:0, 7:1, 8:2, 10:3, 11:3,
                 13:3, 15:4, 16:4, 17:5, 18:5}
@@ -27,10 +30,20 @@ def getclustloc(recid):
     return clustmap[key]
 
 def maketarget(labels):
+    ''' Make a instance-label index
+    Args:
+        labels: array of labels, each training instance corresponding to a
+        training instance
+    Return:
+        A nclasses * n-training instance matrix, ret[i][j] = 1 indicates
+        that the i-th instance has the j-th label.
+
+    '''
     y = tuple([])
+    # produce tuple of label arrays, e.g ([1,2], [1,2])
     for i in range(len(labels)):
         labs = labels[i]
-        y = y + tuple([labs[1:len(labs)]])
+        y = y + tuple([labs[1:len(labs)]]) # append labels as tuples
 
     y = binencode(y)
     return y
@@ -48,13 +61,13 @@ def formatdat(labels):
             x = line
         else:
             x = np.vstack((x, line))
-        
+
     return x
 
 def appendloc(x, labels, locprobs):
     for i in range(len(labels)):
         recid = labels[i][0]
-        loc = getloc(recid) 
+        loc = getloc(recid)
         ex = np.array([loc, getclustloc(recid)])
         ex = np.hstack((ex, locprobs[loc]))
 
@@ -67,21 +80,21 @@ def appendloc(x, labels, locprobs):
         return locmat
 
     return np.hstack((x, locmat))
-    
+
 def getstats(imgdat, recid):
-    nstrips = 16 
-    thresh = 35 
+    nstrips = 16
+    thresh = 35
     stats = np.zeros(nstrips)
-    striplen = len(imgdat) / nstrips 
-    for i in range(nstrips): 
+    striplen = len(imgdat) / nstrips
+    for i in range(nstrips):
         start = i * striplen
-        end = start + striplen 
+        end = start + striplen
         imgstrip = imgdat[start:end].copy()
         imgstrip = imgstrip[imgstrip > thresh]
         if len(imgstrip) != 0:
             stats[i] = np.mean(imgstrip)
 
-    return stats 
+    return stats
 
 def appendstats(x, labels):
     for i in range(len(labels)):
@@ -89,22 +102,22 @@ def appendstats(x, labels):
         imgfile = 'mlsp_contest_dataset2/supplemental_data/filtered_spectrograms/'
         imgfile = imgfile + recmap[recid].strip() + '.bmp'
         imgdat = mpimg.imread(imgfile)
-        stats = getstats(imgdat, recid) 
-                
+        stats = getstats(imgdat, recid)
+
         if i == 0:
-            statsmat = stats 
+            statsmat = stats
         else:
-            statsmat = np.vstack((statsmat, stats)) 
+            statsmat = np.vstack((statsmat, stats))
 
     return np.hstack((statsmat, x))
 
 def getprior(locprobs, labels, y):
-    loccounts = dict() 
+    loccounts = dict()
     for i in range(len(labels)):
         recid = labels[i][0]
-        loc = getloc(recid) 
+        loc = getloc(recid)
         if locprobs.has_key(loc) == False:
-            locprobs[loc] = y[i].copy() 
+            locprobs[loc] = y[i].copy()
             loccounts[loc] = 1
         else:
             locprobs[loc] += y[i]
@@ -114,16 +127,25 @@ def getprior(locprobs, labels, y):
         locprobs[key] /= loccounts[key]
 
 def readlabels(filename, labels, istest=False):
+    ''' Read labels from file
+    Args:
+        filename: the file path that contains the label
+        labels: the variable that stores the result
+        istest: weather it is a test dataset or not
+
+    '''
     file = open(filename, 'r')
     index = 0
     line = file.readline()
     line = file.readline()
     while line != '':
-        if istest == True: 
+        if istest == True:
+            # rec_id, ? for test
             labels[index] = [int(line.split(',')[0])]
         else:
+            # rec_id, [labels] for train data
             labels[index] = map(int, line.split(','))
-            
+
         index += 1
         line = file.readline()
     file.close()
@@ -140,7 +162,7 @@ def loaddata():
     while line != '':
         tokens = line.split(',')
         index = int(tokens[0])
-        recmap[index] = tokens[1].strip() 
+        recmap[index] = tokens[1].strip()
         line = recmapfile.readline()
     recmapfile.close()
 
@@ -169,7 +191,7 @@ def main():
     xtrain = appendloc(xtrain, trainlabels, locprobs)
 
     classif = RandomForestClassifier(n_estimators=500, criterion='entropy',
-                                     random_state=np.random.RandomState(0)) 
+                                     random_state=np.random.RandomState(0))
     classif.fit(xtrain, ytrain)
 
     # Test
@@ -182,18 +204,18 @@ def main():
     probvals = np.zeros((xtest.shape[0], nclasses))
     for i in range(probvals.shape[0]):
         for j in range(nclasses):
-            probvals[i, j] = pred[j][i][1] 
+            probvals[i, j] = pred[j][i][1]
 
     # Make submission file
     probvals = np.around(probvals, 4)
     submfilename = 'subm.csv'
     submfile = open(submfilename, 'w')
     submfile.write('Id,probability\n')
-        
+
     for i in range(probvals.shape[0]):
         for j in range(nclasses):
             strline = str(testlabels[i][0]*100+j) + ',' + str(probvals[i, j]) + '\n'
-            submfile.write(strline) 
+            submfile.write(strline)
 
     submfile.close()
     print 'wrote', submfilename
