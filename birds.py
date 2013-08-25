@@ -8,7 +8,9 @@ nclasses = 19
 def binencode(ls):
     ''' Binary encode
     Args:
-        ls: a tuple
+        ls: a tuple of array
+    Return:
+        Binary encoded matrix
     '''
     ret = np.zeros(nclasses * len(ls))
     for i in range(len(ls)):
@@ -37,7 +39,6 @@ def maketarget(labels):
     Return:
         A nclasses * n-training instance matrix, ret[i][j] = 1 indicates
         that the i-th instance has the j-th label.
-
     '''
     y = tuple([])
     # produce tuple of label arrays, e.g ([1,2], [1,2])
@@ -49,6 +50,17 @@ def maketarget(labels):
     return y
 
 def formatdat(labels):
+    '''
+    Args:
+        labels: array of format [[rec_id, label], [rec-id, label]...]
+    Return:
+        numpy.array of the format
+        [ [hist_v1, hist_v2, ...]
+          [hist_v1, hist_v2, ...]
+          ...
+          ]
+
+    '''
     for i in range(len(labels)):
         recid = labels[i][0]
         line = map(float, hist[recid])
@@ -82,6 +94,14 @@ def appendloc(x, labels, locprobs):
     return np.hstack((x, locmat))
 
 def getstats(imgdat, recid):
+    ''' Strip the imgdat into segments and calculate the mean of each
+    segment
+    Args:
+        imgdat : image data, MxNx3 array for RBG data
+        recid  : the corresponding record id
+    Return:
+        mean value of segments
+    '''
     nstrips = 16
     thresh = 35
     stats = np.zeros(nstrips)
@@ -90,6 +110,7 @@ def getstats(imgdat, recid):
         start = i * striplen
         end = start + striplen
         imgstrip = imgdat[start:end].copy()
+        # get all the pixel that larger than thresh
         imgstrip = imgstrip[imgstrip > thresh]
         if len(imgstrip) != 0:
             stats[i] = np.mean(imgstrip)
@@ -97,11 +118,21 @@ def getstats(imgdat, recid):
     return stats
 
 def appendstats(x, labels):
+    ''' Append the mean of segments into label matrix
+    Args:
+        x      : binary index matrix of labels
+        labels : array of labels, to get the recid
+    Return:
+        binary matrix of labels with stat at the end
+    '''
     for i in range(len(labels)):
         recid = labels[i][0]
         imgfile = 'mlsp_contest_dataset2/supplemental_data/filtered_spectrograms/'
         imgfile = imgfile + recmap[recid].strip() + '.bmp'
-        imgdat = mpimg.imread(imgfile)
+        # note on imread: read an image from a file into an array.
+        # return value as numpy.array. For RGB images, the return value is
+        # Mxnx3
+        imgdat = mpimg.imread(imgfile) # open the image
         stats = getstats(imgdat, recid)
 
         if i == 0:
@@ -112,6 +143,13 @@ def appendstats(x, labels):
     return np.hstack((statsmat, x))
 
 def getprior(locprobs, labels, y):
+    ''' Addup the histogram of a particular cluster
+    Args:
+        locprobs: the return val
+        labels: labels of the form [[rec_id, label1], ...]
+        y: matrix of historgrams
+    Return: a prior defined to be the sum of all historgrams
+    '''
     loccounts = dict()
     for i in range(len(labels)):
         recid = labels[i][0]
@@ -132,7 +170,6 @@ def readlabels(filename, labels, istest=False):
         filename: the file path that contains the label
         labels: the variable that stores the result
         istest: weather it is a test dataset or not
-
     '''
     file = open(filename, 'r')
     index = 0
@@ -183,13 +220,16 @@ def main():
     loaddata()
 
     # Train
-    ytrain = maketarget(trainlabels)
-    xtrain = formatdat(trainlabels)
+    ytrain = maketarget(trainlabels) # binary index of labels
+    xtrain = formatdat(trainlabels) # matrix of histograms
+    # prior (sum of histogram)
     locprobs = dict()
     getprior(locprobs, trainlabels, ytrain)
+
     xtrain = appendstats(xtrain, trainlabels)
     xtrain = appendloc(xtrain, trainlabels, locprobs)
 
+    # make use of random forest classifier
     classif = RandomForestClassifier(n_estimators=500, criterion='entropy',
                                      random_state=np.random.RandomState(0))
     classif.fit(xtrain, ytrain)
@@ -223,6 +263,7 @@ def main():
 if __name__ == '__main__':
     hist = dict()
     recmap = dict()
+    # of the format  [['rec-id', 'label1', 'label2'], ....]
     trainlabels = dict()
     testlabels = dict()
     main()
